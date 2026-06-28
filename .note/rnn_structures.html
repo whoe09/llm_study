@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RNN 구조 정리 — 다대일 · 일대다 · 다대다</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a23; --panel2:#1e222e; --border:#2a2f3d;
+    --txt:#e6e9ef; --muted:#9aa3b2; --accent:#5ea8ff; --accent2:#7c5cff;
+    --green:#4ade80; --orange:#fb923c; --pink:#f472b6; --yellow:#facc15;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:linear-gradient(180deg,#0f1117,#0c0e14 60%);
+    color:var(--txt); font-family:'Segoe UI',-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    line-height:1.7; padding:0 16px 80px;
+  }
+  .wrap{max-width:920px; margin:0 auto;}
+  header.hero{
+    text-align:center; padding:48px 0 28px;
+  }
+  header.hero h1{
+    font-size:30px; margin:0 0 10px; letter-spacing:-.5px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  header.hero p{color:var(--muted); margin:0; font-size:15px;}
+  .badge{
+    display:inline-block; font-size:12px; color:var(--accent);
+    border:1px solid var(--border); background:var(--panel);
+    padding:3px 12px; border-radius:999px; margin-bottom:14px;
+  }
+
+  /* ===== Tabs (재사용 컴포넌트) ===== */
+  .tabs{
+    display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
+    margin:8px 0 28px; position:sticky; top:0; z-index:20;
+    background:rgba(15,17,23,.85); backdrop-filter:blur(8px);
+    padding:12px 0; border-bottom:1px solid var(--border);
+  }
+  .tab-btn{
+    cursor:pointer; border:1px solid var(--border); background:var(--panel);
+    color:var(--muted); padding:9px 18px; border-radius:999px; font-size:14px;
+    font-weight:600; transition:all .18s ease; white-space:nowrap;
+  }
+  .tab-btn:hover{color:var(--txt); border-color:var(--accent);}
+  .tab-btn.active{
+    color:#fff; border-color:transparent;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    box-shadow:0 4px 18px rgba(94,168,255,.25);
+  }
+  .panel{display:none; animation:fade .35s ease;}
+  .panel.active{display:block;}
+  @keyframes fade{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
+
+  /* ===== Card 컴포넌트 ===== */
+  .card{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:var(--radius); padding:22px 24px; margin:18px 0;
+  }
+  .card h2{margin:0 0 6px; font-size:22px;}
+  .card .sub{color:var(--muted); font-size:14px; margin:0 0 14px;}
+  .card h3{
+    font-size:16px; margin:22px 0 8px; display:flex; align-items:center; gap:8px;
+  }
+  .card h3 .ic{font-size:18px;}
+  .analogy{
+    background:linear-gradient(135deg,rgba(124,92,255,.10),rgba(94,168,255,.06));
+    border:1px solid rgba(124,92,255,.3); border-left:4px solid var(--accent2);
+    border-radius:10px; padding:14px 18px; margin:14px 0;
+  }
+  .analogy b{color:var(--accent);}
+  .key{
+    background:rgba(74,222,128,.08); border:1px solid rgba(74,222,128,.3);
+    border-radius:10px; padding:12px 16px; margin:14px 0; font-size:14.5px;
+  }
+  .key b{color:var(--green);}
+  ul{margin:8px 0; padding-left:20px;}
+  li{margin:5px 0;}
+  code{
+    background:var(--panel2); border:1px solid var(--border); border-radius:6px;
+    padding:2px 7px; font-size:13px; color:var(--yellow);
+    font-family:'Cascadia Code','Consolas',monospace;
+  }
+  .diagram{
+    background:var(--panel2); border:1px solid var(--border); border-radius:12px;
+    padding:18px; margin:18px 0; overflow-x:auto;
+  }
+  .diagram .cap{text-align:center; color:var(--muted); font-size:13px; margin-top:8px;}
+  table{
+    width:100%; border-collapse:collapse; margin:16px 0; font-size:14px;
+    overflow:hidden; border-radius:10px;
+  }
+  th,td{border:1px solid var(--border); padding:10px 12px; text-align:left;}
+  th{background:var(--panel2); color:var(--accent); font-weight:600;}
+  td:first-child{font-weight:600; color:var(--txt);}
+  .ex-chips{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0;}
+  .chip{
+    font-size:13px; padding:5px 12px; border-radius:8px;
+    background:var(--panel2); border:1px solid var(--border); color:var(--muted);
+  }
+  .chip b{color:var(--txt);}
+  /* SVG labels */
+  svg text{font-family:'Segoe UI','Malgun Gothic',sans-serif;}
+  footer{text-align:center; color:var(--muted); font-size:12.5px; margin-top:40px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="badge">ch10 · RNN with Text Classification</div>
+    <h1>RNN 구조 한눈에 정리</h1>
+    <p>은닉 상태 · 다대일 · 일대다 · 다대다 — 비유와 흐름도로 이해하기</p>
+  </header>
+
+  <!-- ===== 재사용 탭 버튼 ===== -->
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="hidden">🧠 은닉 상태</button>
+    <button class="tab-btn" data-tab="m2o">📖 다대일</button>
+    <button class="tab-btn" data-tab="o2m">🖼️ 일대다</button>
+    <button class="tab-btn" data-tab="m2m">🗣️ 다대다</button>
+    <button class="tab-btn" data-tab="compare">📊 비교표</button>
+  </nav>
+
+  <!-- ====================== 은닉 상태 ====================== -->
+  <section class="panel active" id="hidden">
+    <div class="card">
+      <h2>🧠 은닉 상태 (Hidden State)</h2>
+      <p class="sub">RNN을 이해하는 출발점 — 모든 구조의 공통 기반</p>
+
+      <div class="key"><b>한 줄 정의:</b> 은닉 상태 = RNN이 <b>지금까지 읽은 내용을 요약해 들고 다니는 "기억 메모"</b>. 매 시점(단어)마다 이 메모를 읽고, 새 단어를 반영해 갱신한다.</div>
+
+      <h3><span class="ic">📖</span> 비유 1 — 책을 읽으며 메모하는 사람</h3>
+      <div class="analogy">
+        소설을 <b>한 문장씩</b> 읽으며 작은 수첩에 줄거리를 요약한다고 상상해보세요.
+        <ul>
+          <li>1번째 문장 → 수첩에 요약 작성 (= 은닉 상태 <b>h₁</b>)</li>
+          <li>2번째 문장 → <b>기존 요약 + 새 문장</b>을 합쳐 업데이트 (<b>h₂</b>)</li>
+          <li>… 마지막 문장까지 → 수첩엔 <b>소설 전체의 요약</b>이 담김</li>
+        </ul>
+        수첩 크기는 항상 똑같음 → 이게 바로 <b>"은닉 상태의 크기 = 32"</b>.
+        문장이 아무리 길어도 32개의 숫자로 압축해서 들고 다닙니다.
+      </div>
+
+      <div class="diagram">
+        <svg viewBox="0 0 760 200" width="100%" height="200" role="img" aria-label="은닉 상태 전달 흐름도">
+          <defs>
+            <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#5ea8ff"/>
+            </marker>
+            <marker id="arrG" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#4ade80"/>
+            </marker>
+          </defs>
+          <!-- cells -->
+          <g>
+            <!-- t=1..4 -->
+            <g>
+              <rect x="40" y="70" width="120" height="56" rx="10" fill="#1e222e" stroke="#5ea8ff"/>
+              <text x="100" y="103" fill="#e6e9ef" font-size="14" text-anchor="middle">RNN 셀</text>
+            </g>
+            <g>
+              <rect x="220" y="70" width="120" height="56" rx="10" fill="#1e222e" stroke="#5ea8ff"/>
+              <text x="280" y="103" fill="#e6e9ef" font-size="14" text-anchor="middle">RNN 셀</text>
+            </g>
+            <g>
+              <rect x="400" y="70" width="120" height="56" rx="10" fill="#1e222e" stroke="#5ea8ff"/>
+              <text x="460" y="103" fill="#e6e9ef" font-size="14" text-anchor="middle">RNN 셀</text>
+            </g>
+            <g>
+              <rect x="580" y="70" width="120" height="56" rx="10" fill="#1e222e" stroke="#5ea8ff"/>
+              <text x="640" y="103" fill="#e6e9ef" font-size="14" text-anchor="middle">RNN 셀</text>
+            </g>
+          </g>
+          <!-- hidden state arrows (between cells) -->
+          <line x1="160" y1="98" x2="220" y2="98" stroke="#4ade80" stroke-width="2.5" marker-end="url(#arrG)"/>
+          <line x1="340" y1="98" x2="400" y2="98" stroke="#4ade80" stroke-width="2.5" marker-end="url(#arrG)"/>
+          <line x1="520" y1="98" x2="580" y2="98" stroke="#4ade80" stroke-width="2.5" marker-end="url(#arrG)"/>
+          <text x="190" y="88" fill="#4ade80" font-size="12" text-anchor="middle">h₁</text>
+          <text x="370" y="88" fill="#4ade80" font-size="12" text-anchor="middle">h₂</text>
+          <text x="550" y="88" fill="#4ade80" font-size="12" text-anchor="middle">h₃</text>
+          <!-- inputs -->
+          <line x1="100" y1="160" x2="100" y2="126" stroke="#5ea8ff" stroke-width="2" marker-end="url(#arr)"/>
+          <line x1="280" y1="160" x2="280" y2="126" stroke="#5ea8ff" stroke-width="2" marker-end="url(#arr)"/>
+          <line x1="460" y1="160" x2="460" y2="126" stroke="#5ea8ff" stroke-width="2" marker-end="url(#arr)"/>
+          <line x1="640" y1="160" x2="640" y2="126" stroke="#5ea8ff" stroke-width="2" marker-end="url(#arr)"/>
+          <text x="100" y="180" fill="#9aa3b2" font-size="12" text-anchor="middle">단어1</text>
+          <text x="280" y="180" fill="#9aa3b2" font-size="12" text-anchor="middle">단어2</text>
+          <text x="460" y="180" fill="#9aa3b2" font-size="12" text-anchor="middle">단어3</text>
+          <text x="640" y="180" fill="#9aa3b2" font-size="12" text-anchor="middle">단어4</text>
+          <!-- final -->
+          <line x1="700" y1="98" x2="745" y2="98" stroke="#4ade80" stroke-width="2.5" marker-end="url(#arrG)"/>
+          <text x="725" y="60" fill="#4ade80" font-size="12" text-anchor="middle">h_last</text>
+          <text x="380" y="30" fill="#e6e9ef" font-size="14" text-anchor="middle" font-weight="bold">초록 화살표 = 은닉 상태(기억 메모)가 다음 시점으로 전달</text>
+        </svg>
+        <div class="cap">이전 기억(hₜ₋₁) + 현재 단어(xₜ) → 새 기억(hₜ)</div>
+      </div>
+
+      <h3><span class="ic">🏭</span> 비유 2 — 컨베이어 벨트의 작업자</h3>
+      <div class="analogy">
+        단어가 벨트를 타고 한 개씩 들어옵니다. 작업자(RNN 셀)는
+        ① 이전 작업자가 넘긴 <b>메모(hₜ₋₁)</b>를 받고 ② 새 <b>단어(xₜ)</b>를 보고 ③ 둘을 합쳐 <b>새 메모(hₜ)</b>를 만들어 다음 작업자에게 넘깁니다.
+      </div>
+      <div class="key">
+        핵심 공식 (외울 필요 X): <code>hₜ = tanh(hₜ₋₁ · Wₕ + xₜ · Wₓ + b)</code><br>
+        → "이전 기억"과 "현재 입력"을 섞어 "새 기억"을 만든다는 뜻.
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 다대일 ====================== -->
+  <section class="panel" id="m2o">
+    <div class="card">
+      <h2>📖 다대일 (Many-to-One)</h2>
+      <p class="sub">여러 개 입력 → 결과는 하나 · <b>지금 학습 중인 감성 분석 모델</b></p>
+
+      <div class="key"><b>핵심:</b> 단어를 <b>여러 개</b> 입력받아 문장 전체를 읽고, 결과는 <b>하나만</b> 출력 (예: 긍정 / 부정).</div>
+
+      <div class="ex-chips">
+        <span class="chip">📝 <b>감성 분석</b> (리뷰 → 긍정/부정)</span>
+        <span class="chip">⭐ 별점 예측</span>
+        <span class="chip">🏷️ 문서 주제 분류</span>
+      </div>
+
+      <h3><span class="ic">📖</span> 비유 — 책 다 읽고 한 줄 평</h3>
+      <div class="analogy">
+        리뷰의 모든 단어를 순서대로 읽으며 수첩을 갱신하다가, <b>마지막 수첩 요약(h_last)</b>만 꺼내 "이 리뷰는 긍정일까?"를 판단합니다. 중간 요약들은 최종 요약을 만들기 위한 과정일 뿐.
+      </div>
+
+      <div class="diagram">
+        <svg viewBox="0 0 760 220" width="100%" height="220" role="img" aria-label="다대일 흐름도">
+          <defs>
+            <marker id="a1" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#5ea8ff"/></marker>
+            <marker id="a1g" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#4ade80"/></marker>
+            <marker id="a1o" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#fb923c"/></marker>
+          </defs>
+          <!-- cells -->
+          <g font-size="13" text-anchor="middle">
+            <rect x="40" y="80" width="100" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="90" y="110" fill="#e6e9ef">셀</text>
+            <rect x="200" y="80" width="100" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="250" y="110" fill="#e6e9ef">셀</text>
+            <rect x="360" y="80" width="100" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="410" y="110" fill="#e6e9ef">셀</text>
+            <rect x="520" y="80" width="100" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="570" y="110" fill="#e6e9ef">셀</text>
+          </g>
+          <!-- hidden state flow -->
+          <line x1="140" y1="105" x2="200" y2="105" stroke="#4ade80" stroke-width="2.5" marker-end="url(#a1g)"/>
+          <line x1="300" y1="105" x2="360" y2="105" stroke="#4ade80" stroke-width="2.5" marker-end="url(#a1g)"/>
+          <line x1="460" y1="105" x2="520" y2="105" stroke="#4ade80" stroke-width="2.5" marker-end="url(#a1g)"/>
+          <!-- inputs -->
+          <g stroke="#5ea8ff" stroke-width="2" marker-end="url(#a1)">
+            <line x1="90" y1="170" x2="90" y2="130"/><line x1="250" y1="170" x2="250" y2="130"/>
+            <line x1="410" y1="170" x2="410" y2="130"/><line x1="570" y1="170" x2="570" y2="130"/>
+          </g>
+          <g font-size="12" fill="#9aa3b2" text-anchor="middle">
+            <text x="90" y="190">아</text><text x="250" y="190">더빙</text>
+            <text x="410" y="190">진짜</text><text x="570" y="190">짜증</text>
+          </g>
+          <!-- single output (only last) -->
+          <line x1="570" y1="80" x2="570" y2="46" stroke="#fb923c" stroke-width="2.5" marker-end="url(#a1o)"/>
+          <rect x="510" y="14" width="120" height="32" rx="8" fill="#1e222e" stroke="#fb923c"/>
+          <text x="570" y="35" fill="#fb923c" font-size="13" text-anchor="middle">시그모이드 → 0.87</text>
+          <text x="250" y="35" fill="#9aa3b2" font-size="12" text-anchor="middle">↑ 출력은 마지막에 단 1번</text>
+        </svg>
+        <div class="cap">모든 단어를 읽은 뒤 마지막 은닉 상태만 시그모이드에 통과 → 긍정 확률 출력</div>
+      </div>
+
+      <div class="key">
+        <b>이진 분류 & 시그모이드:</b> 답이 두 개 중 하나(긍정 vs 부정)라 0~1 사이 확률 하나를 뱉는 <b>시그모이드</b>를 출력층에 사용. (이게 곧 로지스틱 회귀)
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 일대다 ====================== -->
+  <section class="panel" id="o2m">
+    <div class="card">
+      <h2>🖼️ 일대다 (One-to-Many)</h2>
+      <p class="sub">입력 하나 → 출력 여러 개</p>
+
+      <div class="key"><b>핵심:</b> <b>하나</b>의 입력을 받아 → <b>여러 개</b>의 출력(시퀀스)을 순서대로 생성.</div>
+
+      <div class="ex-chips">
+        <span class="chip">🖼️ <b>이미지 캡셔닝</b> (사진 1장 → 설명 문장)</span>
+        <span class="chip">🎵 음악 생성 (시작음 → 멜로디)</span>
+      </div>
+
+      <h3><span class="ic">🎤</span> 비유 — 사진 한 장 보고 이야기 들려주기</h3>
+      <div class="analogy">
+        그림 <b>한 장</b>을 슥 본 뒤, 그걸 머릿속에 담고 "강아지가… 잔디밭에서… 뛰고 있다" 처럼 <b>단어를 한 개씩 이어서</b> 문장을 만들어냅니다. 입력은 하나(사진)지만 출력은 여러 단어!
+      </div>
+
+      <div class="diagram">
+        <svg viewBox="0 0 760 220" width="100%" height="220" role="img" aria-label="일대다 흐름도">
+          <defs>
+            <marker id="a2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#5ea8ff"/></marker>
+            <marker id="a2g" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#4ade80"/></marker>
+            <marker id="a2o" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#fb923c"/></marker>
+          </defs>
+          <!-- single input -->
+          <rect x="20" y="80" width="90" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/>
+          <text x="65" y="103" fill="#e6e9ef" font-size="12" text-anchor="middle">🖼️ 사진</text>
+          <text x="65" y="120" fill="#9aa3b2" font-size="11" text-anchor="middle">입력 1개</text>
+          <line x1="110" y1="105" x2="160" y2="105" stroke="#5ea8ff" stroke-width="2.5" marker-end="url(#a2)"/>
+          <!-- cells -->
+          <g font-size="13" text-anchor="middle">
+            <rect x="160" y="80" width="90" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="205" y="110" fill="#e6e9ef">셀</text>
+            <rect x="320" y="80" width="90" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="365" y="110" fill="#e6e9ef">셀</text>
+            <rect x="480" y="80" width="90" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="525" y="110" fill="#e6e9ef">셀</text>
+            <rect x="640" y="80" width="90" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="685" y="110" fill="#e6e9ef">셀</text>
+          </g>
+          <line x1="250" y1="105" x2="320" y2="105" stroke="#4ade80" stroke-width="2.5" marker-end="url(#a2g)"/>
+          <line x1="410" y1="105" x2="480" y2="105" stroke="#4ade80" stroke-width="2.5" marker-end="url(#a2g)"/>
+          <line x1="570" y1="105" x2="640" y2="105" stroke="#4ade80" stroke-width="2.5" marker-end="url(#a2g)"/>
+          <!-- many outputs -->
+          <g stroke="#fb923c" stroke-width="2.5" marker-end="url(#a2o)">
+            <line x1="205" y1="80" x2="205" y2="46"/><line x1="365" y1="80" x2="365" y2="46"/>
+            <line x1="525" y1="80" x2="525" y2="46"/><line x1="685" y1="80" x2="685" y2="46"/>
+          </g>
+          <g font-size="12" fill="#fb923c" text-anchor="middle">
+            <text x="205" y="38">강아지가</text><text x="365" y="38">잔디밭에서</text>
+            <text x="525" y="38">뛰고</text><text x="685" y="38">있다</text>
+          </g>
+          <text x="450" y="200" fill="#9aa3b2" font-size="12" text-anchor="middle">입력은 처음 1번, 출력(주황)은 매 시점마다 → 문장 생성</text>
+        </svg>
+        <div class="cap">하나의 입력을 받아 단어를 한 개씩 이어 붙여 시퀀스를 생성</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 다대다 ====================== -->
+  <section class="panel" id="m2m">
+    <div class="card">
+      <h2>🗣️ 다대다 (Many-to-Many)</h2>
+      <p class="sub">여러 입력 → 여러 출력 · <b>두 가지 유형</b>으로 나뉨</p>
+
+      <!-- 유형 1 -->
+      <h3><span class="ic">🛂</span> 유형 1 — 입력마다 즉시 출력 (동기형)</h3>
+      <div class="key"><b>핵심:</b> 단어를 하나 읽을 때마다 <b>그 자리에서 바로</b> 결과를 하나씩 출력. 입력 길이 = 출력 길이.</div>
+      <div class="ex-chips">
+        <span class="chip">🏷️ <b>개체명 인식(NER)</b></span>
+        <span class="chip">🔤 품사 태깅(POS)</span>
+      </div>
+      <div class="analogy">
+        <b>입국 심사대의 심사관</b> 🛂 — 여행객(단어)이 한 줄로 지나가면, 심사관은 앞선 여행객 정보(이전 은닉 상태)를 기억한 채 지금 여행객을 보고 <b>그 자리에서 바로 도장</b>을 찍습니다(출력). 코드에선 <code>return_sequences=True</code>.
+      </div>
+      <div class="diagram">
+        <svg viewBox="0 0 760 220" width="100%" height="220" role="img" aria-label="다대다 유형1 흐름도">
+          <defs>
+            <marker id="b1" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#5ea8ff"/></marker>
+            <marker id="b1g" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#4ade80"/></marker>
+            <marker id="b1o" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#fb923c"/></marker>
+          </defs>
+          <g font-size="13" text-anchor="middle">
+            <rect x="40" y="85" width="100" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="90" y="115" fill="#e6e9ef">셀</text>
+            <rect x="200" y="85" width="100" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="250" y="115" fill="#e6e9ef">셀</text>
+            <rect x="360" y="85" width="100" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="410" y="115" fill="#e6e9ef">셀</text>
+            <rect x="520" y="85" width="100" height="50" rx="10" fill="#1e222e" stroke="#5ea8ff"/><text x="570" y="115" fill="#e6e9ef">셀</text>
+          </g>
+          <line x1="140" y1="110" x2="200" y2="110" stroke="#4ade80" stroke-width="2.5" marker-end="url(#b1g)"/>
+          <line x1="300" y1="110" x2="360" y2="110" stroke="#4ade80" stroke-width="2.5" marker-end="url(#b1g)"/>
+          <line x1="460" y1="110" x2="520" y2="110" stroke="#4ade80" stroke-width="2.5" marker-end="url(#b1g)"/>
+          <!-- inputs -->
+          <g stroke="#5ea8ff" stroke-width="2" marker-end="url(#b1)">
+            <line x1="90" y1="175" x2="90" y2="135"/><line x1="250" y1="175" x2="250" y2="135"/>
+            <line x1="410" y1="175" x2="410" y2="135"/><line x1="570" y1="175" x2="570" y2="135"/>
+          </g>
+          <g font-size="12" fill="#9aa3b2" text-anchor="middle">
+            <text x="90" y="195">이순신</text><text x="250" y="195">은</text><text x="410" y="195">서울</text><text x="570" y="195">에서</text>
+          </g>
+          <!-- outputs every step -->
+          <g stroke="#fb923c" stroke-width="2.5" marker-end="url(#b1o)">
+            <line x1="90" y1="85" x2="90" y2="50"/><line x1="250" y1="85" x2="250" y2="50"/>
+            <line x1="410" y1="85" x2="410" y2="50"/><line x1="570" y1="85" x2="570" y2="50"/>
+          </g>
+          <g font-size="12" fill="#fb923c" text-anchor="middle">
+            <text x="90" y="40">인명</text><text x="250" y="40">조사</text><text x="410" y="40">지명</text><text x="570" y="40">조사</text>
+          </g>
+        </svg>
+        <div class="cap">매 시점 입력(파랑) → 매 시점 출력(주황). 입력·출력 길이가 같음</div>
+      </div>
+
+      <!-- 유형 2 -->
+      <h3><span class="ic">🗣️</span> 유형 2 — 다 읽고 → 다 출력 (인코더-디코더 / seq2seq)</h3>
+      <div class="key"><b>핵심:</b> 입력을 끝까지 다 읽어 요약한 뒤, 그 요약으로 새 시퀀스를 처음부터 생성. <b>입력 길이 ≠ 출력 길이여도 OK.</b></div>
+      <div class="ex-chips">
+        <span class="chip">🌐 <b>기계 번역</b></span>
+        <span class="chip">💬 챗봇</span>
+        <span class="chip">📰 문서 요약</span>
+      </div>
+      <div class="analogy">
+        <b>통역사</b> 🗣️ —
+        <ul>
+          <li><b>1단계 듣기(인코더):</b> 한국어 문장을 <b>끝까지 다 듣고</b>(중간에 말 안 함) 머릿속에 "전체 의미"를 요약 = 문맥 벡터.</li>
+          <li><b>2단계 말하기(디코더):</b> 그 요약을 바탕으로 영어를 <b>한 단어씩 생성</b>. 방금 뱉은 단어를 보며 다음 단어를 이어감.</li>
+        </ul>
+        듣기 담당(인코더) + 말하기 담당(디코더), <b>두 개의 RNN</b>으로 구성!
+      </div>
+      <div class="diagram">
+        <svg viewBox="0 0 760 240" width="100%" height="240" role="img" aria-label="다대다 유형2 seq2seq 흐름도">
+          <defs>
+            <marker id="c1" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#5ea8ff"/></marker>
+            <marker id="c1g" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#4ade80"/></marker>
+            <marker id="c1o" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#fb923c"/></marker>
+            <marker id="c1p" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#f472b6"/></marker>
+          </defs>
+          <!-- encoder box -->
+          <rect x="20" y="70" width="320" height="90" rx="12" fill="rgba(94,168,255,.06)" stroke="#5ea8ff" stroke-dasharray="5 4"/>
+          <text x="180" y="60" fill="#5ea8ff" font-size="13" text-anchor="middle" font-weight="bold">인코더 (듣기)</text>
+          <!-- decoder box -->
+          <rect x="430" y="70" width="310" height="90" rx="12" fill="rgba(244,114,182,.06)" stroke="#f472b6" stroke-dasharray="5 4"/>
+          <text x="585" y="60" fill="#f472b6" font-size="13" text-anchor="middle" font-weight="bold">디코더 (말하기)</text>
+          <!-- encoder cells -->
+          <g font-size="12" text-anchor="middle">
+            <rect x="40" y="95" width="80" height="44" rx="9" fill="#1e222e" stroke="#5ea8ff"/><text x="80" y="122" fill="#e6e9ef">셀</text>
+            <rect x="150" y="95" width="80" height="44" rx="9" fill="#1e222e" stroke="#5ea8ff"/><text x="190" y="122" fill="#e6e9ef">셀</text>
+            <rect x="260" y="95" width="80" height="44" rx="9" fill="#1e222e" stroke="#5ea8ff"/><text x="300" y="122" fill="#e6e9ef">셀</text>
+          </g>
+          <line x1="120" y1="117" x2="150" y2="117" stroke="#4ade80" stroke-width="2.5" marker-end="url(#c1g)"/>
+          <line x1="230" y1="117" x2="260" y2="117" stroke="#4ade80" stroke-width="2.5" marker-end="url(#c1g)"/>
+          <!-- enc inputs -->
+          <g stroke="#5ea8ff" stroke-width="2" marker-end="url(#c1)">
+            <line x1="80" y1="185" x2="80" y2="139"/><line x1="190" y1="185" x2="190" y2="139"/><line x1="300" y1="185" x2="300" y2="139"/>
+          </g>
+          <g font-size="11" fill="#9aa3b2" text-anchor="middle">
+            <text x="80" y="202">나는</text><text x="190" y="202">학생</text><text x="300" y="202">이다</text>
+          </g>
+          <!-- context vector -->
+          <line x1="340" y1="117" x2="450" y2="117" stroke="#facc15" stroke-width="3" marker-end="url(#c1g)"/>
+          <text x="395" y="105" fill="#facc15" font-size="11" text-anchor="middle">문맥 벡터</text>
+          <text x="395" y="135" fill="#facc15" font-size="11" text-anchor="middle">(전체 요약)</text>
+          <!-- decoder cells -->
+          <g font-size="12" text-anchor="middle">
+            <rect x="450" y="95" width="62" height="44" rx="9" fill="#1e222e" stroke="#f472b6"/><text x="481" y="122" fill="#e6e9ef">셀</text>
+            <rect x="540" y="95" width="62" height="44" rx="9" fill="#1e222e" stroke="#f472b6"/><text x="571" y="122" fill="#e6e9ef">셀</text>
+            <rect x="630" y="95" width="62" height="44" rx="9" fill="#1e222e" stroke="#f472b6"/><text x="661" y="122" fill="#e6e9ef">셀</text>
+          </g>
+          <line x1="512" y1="117" x2="540" y2="117" stroke="#f472b6" stroke-width="2.5" marker-end="url(#c1p)"/>
+          <line x1="602" y1="117" x2="630" y2="117" stroke="#f472b6" stroke-width="2.5" marker-end="url(#c1p)"/>
+          <!-- dec outputs -->
+          <g stroke="#fb923c" stroke-width="2.5" marker-end="url(#c1o)">
+            <line x1="481" y1="95" x2="481" y2="55"/><line x1="571" y1="95" x2="571" y2="55"/><line x1="661" y1="95" x2="661" y2="55"/>
+          </g>
+          <g font-size="12" fill="#fb923c" text-anchor="middle">
+            <text x="481" y="45">I</text><text x="571" y="45">am</text><text x="661" y="45">student</text>
+          </g>
+        </svg>
+        <div class="cap">인코더가 다 읽어 문맥 벡터로 요약 → 디코더가 그걸 받아 새 문장을 한 단어씩 생성</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 비교표 ====================== -->
+  <section class="panel" id="compare">
+    <div class="card">
+      <h2>📊 한눈에 비교</h2>
+      <p class="sub">은닉 상태 관점 — "언제, 몇 번 꺼내 쓰느냐"의 차이</p>
+      <div style="overflow-x:auto;">
+      <table>
+        <tr><th>구조</th><th>입력 : 출력</th><th>비유</th><th>출력 시점</th><th>대표 예시</th></tr>
+        <tr><td>다대일</td><td>다 : 1</td><td>책 다 읽고 한 줄 평</td><td>마지막 1번</td><td>감성 분석</td></tr>
+        <tr><td>일대다</td><td>1 : 다</td><td>사진 보고 이야기</td><td>매 시점</td><td>이미지 캡셔닝</td></tr>
+        <tr><td>다대다 ①</td><td>다 : 다 (길이 같음)</td><td>입국 심사관</td><td>매 시점 즉시</td><td>개체명 인식</td></tr>
+        <tr><td>다대다 ②</td><td>다 : 다 (길이 달라도)</td><td>통역사</td><td>다 읽은 후 생성</td><td>번역 · 챗봇</td></tr>
+      </table>
+      </div>
+      <div class="key">
+        <b>은닉 상태로 정리:</b>
+        <ul>
+          <li><b>다대일</b> → 마지막 수첩 요약 <b>하나만</b> 꺼내 씀</li>
+          <li><b>다대다 ①</b> → <b>매 시점의 수첩 내용</b>을 그때그때 출력으로 변환</li>
+          <li><b>다대다 ②</b> → 인코더의 마지막 수첩을 디코더에게 <b>건네주고</b>, 디코더가 새 수첩을 써 내려감</li>
+        </ul>
+        은닉 상태 개념 자체는 동일하고, 구조마다 <b>사용 방식</b>만 다를 뿐!
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    📚 ch10 RNN 학습 노트 · 질의응답 기반 정리 · 2026-06-28
+  </footer>
+</div>
+
+<script>
+  // ===== 재사용 가능한 탭 컴포넌트 로직 =====
+  const tabs = document.querySelectorAll('.tab-btn');
+  const panels = document.querySelectorAll('.panel');
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      tabs.forEach(b => b.classList.toggle('active', b === btn));
+      panels.forEach(p => p.classList.toggle('active', p.id === target));
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  });
+</script>
+</body>
+</html>
