@@ -299,7 +299,6 @@ print(train_data['document'].isnull().sum())
 # %%
 train_data = train_data.dropna(how='any')
 # %%
-# %%
 # test_data 동일 진행
 test_data.drop_duplicates(subset = ['document'], inplace=True)
 test_data['document'] = test_data['document'].str.replace("[^ㄱ-ㅎㅏ-ㅣ가-힣 ]","", regex=True)
@@ -420,8 +419,10 @@ def sentiment_predict(new_sentence):
   new_sentence = [word for word in new_sentence if not word in stopwords] # 불용어 제거
   encoded = tokenizer.texts_to_sequences([new_sentence]) # 정수 인코딩
   pad_new = pad_sequences(encoded, maxlen = max_len) # 패딩
-  score = float(loaded_model.predict(pad_new)) # 예측
+  score = float(loaded_model.predict(pad_new).item()) # 예측
   if(score > 0.5):
     print("{:.2f}% 확률로 긍정 리뷰입니다.\n".format(score * 100))
   else:
     print("{:.2f}% 확률로 부정 리뷰입니다.\n".format((1 - score) * 100))
+# %%
+sentiment_predict('헐..돈아깝다')
